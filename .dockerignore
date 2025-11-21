@@ -1,0 +1,20 @@
+# Ignore the virtual environment (Huge speed boost)
+venv
+.venv
+
+# Ignore python compiled files (Prevents false cache invalidation)
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore the database (We want a fresh one or a mounted one, not the local one)
+*.db
+*.sqlite3
+
+# Ignore git history
+.git
+.gitignore
+
+# Ignore the test cache
+.pytest_cache
