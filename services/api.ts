@@ -1,11 +1,10 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
 
-// Use 10.0.2.2 for Android Emulator, localhost for iOS
-const BASE_URL = Platform.OS === 'android' 
-  ? 'http://10.0.2.2:8000' 
-  : 'http://localhost:8000';
+// Your specific IP address
+// The base URL is linked to the ngrok given link that listens to the port 8000. 
+// So each time the ngrok is restarted, this link has to be changed as well
+const BASE_URL = '';
 
 const api = axios.create({
   baseURL: BASE_URL,

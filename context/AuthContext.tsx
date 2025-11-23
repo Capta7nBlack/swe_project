@@ -49,9 +49,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const register = async (email: string, pass: string, name: string) => {
-    await api.post('/auth/register', null, {
-      params: { email, password: pass, name, role: 'consumer' }
+    // FIXED: Send data as JSON Body (2nd argument), not params
+    await api.post('/auth/register', { 
+      email: email, 
+      password: pass, 
+      name: name, 
+      role: 'consumer' 
     });
+    
     await login(email, pass); // Auto-login after register
   };
 
@@ -69,4 +74,4 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export const useAuth = () => useContext(AuthContext);
+export const useAuth = () => useContext(AuthContext);() => useContext(AuthContext);

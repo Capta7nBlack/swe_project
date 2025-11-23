@@ -1,43 +1,54 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useSegments, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import 'react-native-reanimated';
 
-// 1. Import the AuthProvider we created
-import { AuthProvider } from '../context/AuthContext';
-import { useColorScheme } from '@/hooks/use-color-scheme'; // Keep your existing hook
+import { AuthProvider, useAuth } from '../context/AuthContext';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
-export const unstable_settings = {
-  initialRouteName: '(tabs)',
-};
-
-export default function RootLayout() {
+// This component handles the redirect logic
+function RootLayoutNav() {
+  const { user, isLoading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
   const colorScheme = useColorScheme();
 
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === 'auth';
+
+    if (!user && !inAuthGroup) {
+      // If not logged in and not in the auth screen, go to Login
+      router.replace('/auth/login');
+    } else if (user && inAuthGroup) {
+      // If logged in and trying to go to login, go to Tabs
+      router.replace('/(tabs)');
+    }
+  }, [user, segments, isLoading]);
+
+  if (isLoading) return null; // Show nothing while checking login
+
   return (
-    // 2. Wrap everything in AuthProvider so the whole app handles Login state
+    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="auth/login" options={{ title: 'Login' }} />
+        <Stack.Screen name="auth/register" options={{ title: 'Create Account' }} />
+        <Stack.Screen name="supplier/[id]" options={{ presentation: 'modal', title: 'Supplier Catalog', headerShown: true }} />
+        <Stack.Screen name="chat/[id]" options={{ title: 'Chat', headerShown: true }} />
+      </Stack>
+      <StatusBar style="auto" />
+    </ThemeProvider>
+  );
+}
+
+// The Main Export wraps everything in AuthProvider
+export default function RootLayout() {
+  return (
     <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false }}>
-          {/* Main App (Tabs) */}
-          <Stack.Screen name="(tabs)" />
-
-          {/* Auth Screens */}
-          <Stack.Screen name="auth/login" options={{ title: 'Login' }} />
-          <Stack.Screen name="auth/register" options={{ title: 'Create Account' }} />
-
-          {/* Dynamic Screens */}
-          <Stack.Screen 
-            name="supplier/[id]" 
-            options={{ presentation: 'modal', title: 'Supplier Catalog', headerShown: true }} 
-          />
-          <Stack.Screen 
-             name="chat/[id]" 
-             options={{ title: 'Chat', headerShown: true }} 
-          />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <RootLayoutNav />
     </AuthProvider>
   );
 }

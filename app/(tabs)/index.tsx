@@ -1,98 +1,89 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, RefreshControl } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import api from '../../services/api';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function DiscoveryScreen() {
+  const [suppliers, setSuppliers] = useState([]);
+  const [myLinks, setMyLinks] = useState<number[]>([]); 
+  const [refreshing, setRefreshing] = useState(false);
 
-export default function HomeScreen() {
+  const loadData = async () => {
+    try {
+      const suppliersRes = await api.get('/suppliers');
+      const linksRes = await api.get('/links/my-requests');
+      
+      const linkedSupplierIds = linksRes.data.map((link: any) => link.supplier_id);
+      
+      setSuppliers(suppliersRes.data);
+      setMyLinks(linkedSupplierIds);
+    } catch (e) { 
+      console.error(e); 
+    }
+  };
+
+  // FIX: Refresh data every time this screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const requestLink = async (supplierId: number) => {
+    try {
+      await api.post('/links', { supplier_id: supplierId });
+      Alert.alert("Success", "Request sent!");
+      loadData(); // Refresh immediately
+    } catch (e: any) {
+      Alert.alert("Error", e.response?.data?.detail || "Failed");
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <FlatList
+        data={suppliers}
+        keyExtractor={(item: any) => item.id.toString()}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        renderItem={({ item }) => {
+          const isLinked = myLinks.includes(item.id);
+          return (
+            <View style={styles.card}>
+              <View style={{flex: 1}}>
+                <Text style={styles.name}>{item.name} {item.verification_status && "✅"}</Text>
+                <Text style={styles.about}>{item.about || "No description"}</Text>
+              </View>
+              
+              {isLinked ? (
+                <View style={styles.connectedBadge}>
+                  <Text style={styles.connectedText}>Linked</Text>
+                </View>
+              ) : (
+                <TouchableOpacity style={styles.btn} onPress={() => requestLink(item.id)}>
+                  <Text style={styles.btnText}>Connect</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+  container: { flex: 1, padding: 10 },
+  card: { padding: 15, backgroundColor: 'white', marginBottom: 10, borderRadius: 8, elevation: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  name: { fontSize: 18, fontWeight: 'bold' },
+  about: { color: 'gray', marginTop: 4 },
+  btn: { backgroundColor: '#007AFF', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 5 },
+  btnText: { color: 'white', fontWeight: 'bold' },
+  connectedBadge: { backgroundColor: '#E5E5EA', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 5 },
+  connectedText: { color: 'gray', fontWeight: 'bold' }
 });
