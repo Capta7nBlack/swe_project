@@ -5,7 +5,7 @@ import "./styles.css";
 import './i18n';
 
 // enable mock API during local dev (remove later)
-window.__USE_MOCK = true;
+// window.__USE_MOCK = true;
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

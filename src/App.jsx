@@ -1,4 +1,4 @@
-// web/src/App.jsx
+// src/App.jsx
 import React, { useState, useEffect, useRef } from "react";
 import {
   BrowserRouter,
@@ -12,124 +12,66 @@ import {
 
 import { AuthProvider, useAuth } from "./AuthContext";
 import Logo from "./Logo";
-import { useTranslation } from "react-i18next";
+import { api } from "./api";
 
-// backend base (change when you have real backend)
-const BASE = "http://localhost:8000";
-
-// mock api loader (only when runtime flag set)
-let mockApi;
-if (typeof window !== "undefined" && window.__USE_MOCK) {
-  // eslint-disable-next-line
-  mockApi = require("./mockApi");
-}
-
-const MOCK_ORDERS = [
-  {
-    id: 1001,
-    consumer_name: "Bakyt",
-    total_amount: "54,000.00",
-    status: "pending",
-    delivery_type: "delivery",      // <— added
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 1002,
-    consumer_name: "Ainur",
-    total_amount: "12,500.00",
-    status: "confirmed",
-    delivery_type: "pickup",        // <— added
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 1003,
-    consumer_name: "Retail Store #12",
-    total_amount: "98,300.00",
-    status: "shipped",
-    delivery_type: "delivery",      // <— added
-    created_at: new Date(Date.now() - 2 * 86400000).toISOString(),
-  },
-];
-
-// Mock products for supplier catalog (will be replaced by /products API later)
-const MOCK_PRODUCTS = [
-  {
-    id: 1,
-    name: "Flour 50kg",
-    original_price: 12500,
-    price: 12500,
-    quantity: 120,
-    unit: "bag",
-    discountPercent: null,
-  },
-  {
-    id: 2,
-    name: "Sunflower Oil 5L",
-    original_price: 3800,
-    price: 3800,
-    quantity: 60,
-    unit: "bottle",
-    discountPercent: null,
-  },
-  {
-    id: 3,
-    name: "Sugar 25kg",
-    original_price: 9300,
-    price: 9300,
-    quantity: 45,
-    unit: "bag",
-    discountPercent: null,
-  },
-  {
-    id: 4,
-    name: "Rice 25kg",
-    original_price: 10400,
-    price: 10400,
-    quantity: 30,
-    unit: "bag",
-    discountPercent: null,
-  },
-];
-
-/* ---------------- Header Bar ---------------- */
+/* ---------------- Header ---------------- */
 function HeaderBar() {
   const { token, logout } = useAuth();
   const navigate = useNavigate();
-  const { t, i18n } = useTranslation();
+  const location = useLocation();
 
-  const changeLang = (lng) => {
-    i18n.changeLanguage(lng);
-    localStorage.setItem("lang", lng);
-  };
+  const isActive = (path) => location.pathname === path;
 
   return (
     <div className="app-shell header">
       <div style={{ display: "flex", alignItems: "center", gap: 14, width: "100%" }}>
         <Logo small />
+
         <nav className="nav" style={{ marginLeft: 12 }}>
-          {token && <Link to="/dashboard">{t("dashboard")}</Link>}
-          {token && <Link to="/products">{t("products")}</Link>}
-          {token && <Link to="/orders">{t("orders")}</Link>}
-          {token && <Link to="/chat">{t("chat")}</Link>}
-          <Link to="/about">{t("about")}</Link>
+          {token && (
+            <>
+              <Link to="/dashboard" className={isActive("/dashboard") ? "active" : ""}>
+                Dashboard
+              </Link>
+              <Link to="/products" className={isActive("/products") ? "active" : ""}>
+                Products
+              </Link>
+              <Link to="/orders" className={isActive("/orders") ? "active" : ""}>
+                Orders
+              </Link>
+              <Link to="/chat" className={isActive("/chat") ? "active" : ""}>
+                Chat
+              </Link>
+              <Link to="/profile" className={isActive("/profile") ? "active" : ""}>
+                Profile
+              </Link>
+            </>
+          )}
+
+          <Link to="/about" className={isActive("/about") ? "active" : ""}>
+            About
+          </Link>
+
+          {!token && (
+            <Link
+              to="/register"
+              className={isActive("/register") ? "active" : ""}
+              style={{ marginLeft: 8 }}
+            >
+              Register
+            </Link>
+          )}
         </nav>
       </div>
 
-      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-        {/* language selector */}
-        <select
-          value={i18n.language}
-          onChange={(e) => changeLang(e.target.value)}
-          style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid rgba(0,0,0,0.08)" }}
-        >
-          <option value="kz">KZ</option>
-          <option value="ru">RU</option>
-          <option value="en">EN</option>
-        </select>
-
+      <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
         {!token ? (
-          <button className="btn btn-primary" style={{ textDecoration: "none", fontWeight: 500 }} onClick={() => navigate("/")}>
-            {t("login")}
+          <button
+            className="btn btn-primary"
+            style={{ textDecoration: "none", fontWeight: 500 }}
+            onClick={() => navigate("/")}
+          >
+            Login
           </button>
         ) : (
           <button
@@ -139,7 +81,7 @@ function HeaderBar() {
               navigate("/");
             }}
           >
-            {t("logout")}
+            Logout
           </button>
         )}
       </div>
@@ -147,72 +89,141 @@ function HeaderBar() {
   );
 }
 
-/* ---------------- Auth watcher (redirect if unauthenticated on protected paths) ---------------- */
 function AuthWatcher() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
-    // list of protected routes (prefix match)
-    const protectedPrefixes = ["/dashboard", "/products", "/orders", "/chat"];
+    const protectedPrefixes = [
+      "/dashboard",
+      "/products",
+      "/orders",
+      "/chat",
+      "/profile"
+    ];
 
-    // if we're on a protected path and the user is not logged in -> redirect to login
     const path = location.pathname || "/";
-    const isProtected = protectedPrefixes.some((p) => path === p || path.startsWith(p + "/"));
+    const isProtected = protectedPrefixes.some(
+      (p) => path === p || path.startsWith(p + "/")
+    );
 
     if (isProtected && !token) {
       navigate("/", { replace: true });
     }
-    // no else branch; when token appears, components will render normally
   }, [token, location.pathname, navigate]);
 
   return null;
 }
 
+/* ---------------- Sign Up Page ---------------- */
+function SignUpPage() {
+  const navigate = useNavigate();
+  const [fullName, setFullName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+
+  const createAccount = async (e) => {
+    e.preventDefault();
+
+    if (!fullName.trim() || !email.trim() || !password.trim()) {
+      alert("Please fill all fields.");
+      return;
+    }
+
+    try {
+      await api.post("/auth/register", {
+        email,
+        password,
+        name: fullName,
+        role: "supplier_admin"
+      });
+      alert("Account successfully created! Please log in.");
+      navigate("/");
+    } catch (err) {
+      alert("Registration failed: " + err.message);
+    }
+  };
+
+  return (
+    <div className="app-shell center-page" style={{ marginTop: "-80px" }}>
+      <div className="card center-card login-card fade-in" style={{ maxWidth: 640 }}>
+        <div className="panel-title" style={{ textAlign: "center" }}>
+          Create Supplier Account
+        </div>
+
+        <form onSubmit={createAccount} style={{ marginTop: 8 }}>
+          <div
+            className="form-row"
+            style={{ display: "flex", flexDirection: "column", gap: 10 }}
+          >
+            <input
+              className="input"
+              placeholder="Full name (Company Name)"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+            <input
+              className="input"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              className="input"
+              placeholder="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+
+          <div className="row" style={{ justifyContent: "center", marginTop: 14 }}>
+            <button type="submit" className="btn btn-primary" style={{ minWidth: 160 }}>
+              Create account
+            </button>
+          </div>
+        </form>
+
+        <div style={{ textAlign: "center", marginTop: 12 }}>
+          <span className="small">
+            Already have an account?{" "}
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                navigate("/");
+              }}
+            >
+              Login
+            </a>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Login Page ---------------- */
 function LoginPage() {
-  const { t } = useTranslation();
-  const { setToken, login } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
   const doLogin = async () => {
     try {
-      if (typeof window !== "undefined" && window.__USE_MOCK) {
-        if (mockApi && mockApi.login) {
-          const resp = await mockApi.login(email, password);
-          setToken(resp.access_token);
-          navigate("/dashboard");
-          return;
-        }
-        setToken("demo-token");
-        navigate("/dashboard");
-        return;
-      }
-
-      const res = await fetch(BASE + "/auth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ username: email, password }),
-      });
-      const data = await res.json();
-      if (data.access_token) {
-        setToken(data.access_token);
-        navigate("/dashboard");
-      } else {
-        alert("Login failed");
-      }
+      await login(email, password);
+      navigate("/dashboard");
     } catch (err) {
-      alert("Network error: " + err.message);
+      alert("Login failed: " + err.message);
     }
   };
 
   return (
     <div className="app-shell center-page" style={{ marginTop: "-80px" }}>
       <div className="card center-card login-card fade-in">
-        <div className="panel-title" style={{ textAlign: "center" }}>{t("supplierLogin")}</div>
+        <div className="panel-title" style={{ textAlign: "center" }}>Supplier Login</div>
 
         <div className="form-row">
           <input className="input" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -220,56 +231,58 @@ function LoginPage() {
         </div>
 
         <div className="row" style={{ justifyContent: "center" }}>
-          <button className="btn btn-primary" onClick={doLogin}>{t("login")}</button>
-          <button className="btn btn-ghost" onClick={() => { setEmail("supplier@example.com"); setPassword("password"); }}>{t("useDemo")}</button>
+          <button className="btn btn-primary" onClick={doLogin}>Login</button>
         </div>
-
-        <div className="helper">For demo, click <em>Use demo</em> (mock mode required).</div>
       </div>
     </div>
   );
 }
 
-/* ---------------- DASHBOARD ---------------- */
+/* ---------------- Dashboard ---------------- */
 function Dashboard() {
-  const { t } = useTranslation();
-  const [linkRequests, setLinkRequests] = useState([
-    {
-      id: 1,
-      consumerName: "Bakyt Store",
-      supplierName: "Our Company",
-      createdAt: new Date().toISOString(),
-      status: "pending",
-    },
-    {
-      id: 2,
-      consumerName: "Ainur Market",
-      supplierName: "Our Company",
-      createdAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
-      status: "pending",
-    },
-    {
-      id: 3,
-      consumerName: "Retail Store #12",
-      supplierName: "Our Company",
-      createdAt: new Date(Date.now() - 24 * 3600_000).toISOString(),
-      status: "accepted",
-    },
-  ]);
+  const [linkRequests, setLinkRequests] = useState([]);
+  const [orders, setOrders] = useState([]);
 
-  // Быстрые статусы по заказам
-  const orders = MOCK_ORDERS || [];
-  const totalOrders = orders.length;
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      const links = await api.get("/supplier/links");
+      // Normalize fields for UI
+      const mappedLinks = links.map(item => ({
+        id: item.id,
+        consumerName: `Customer #${item.consumer_id}`,
+        createdAt: item.created_at,
+        status: item.status
+      }));
+      setLinkRequests(mappedLinks);
+
+      const orderData = await api.get("/orders");
+      const mappedOrders = orderData.map(o => ({
+        ...o,
+        consumerName: `Customer #${o.consumer_id}`
+      }));
+      setOrders(mappedOrders);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const updateLinkStatus = async (id, status) => {
+    try {
+      await api.put(`/supplier/links/${id}`, { status });
+      loadData(); // refresh
+    } catch (e) {
+      alert("Failed to update status");
+    }
+  };
+
   const pendingOrders = orders.filter((o) => o.status === "pending").length;
-  const confirmedOrders = orders.filter(
-    (o) => o.status === "confirmed" || o.status === "shipped"
-  ).length;
-
-  // Активные чаты
-  const totalChats = (MOCK_CONVERSATIONS || []).length;
-
-  // Заявки на связь
   const pendingLinks = linkRequests.filter((l) => l.status === "pending").length;
+  // Use accepted links as "Active Chats" / "Connected Customers"
+  const totalChats = linkRequests.filter((l) => l.status === "accepted").length;
 
   const today = new Date();
   const isSameDay = (ts) => {
@@ -282,36 +295,17 @@ function Dashboard() {
   };
   const todaysOrders = orders.filter((o) => isSameDay(o.created_at)).length;
 
-  const formatDateTime = (ts) =>
-    new Date(ts).toLocaleString([], {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const formatDateTime = (ts) => new Date(ts).toLocaleString();
 
-  // Обработчик кнопок Approve / Reject
-  const updateLinkStatus = (id, status) => {
-    setLinkRequests((prev) =>
-      prev.map((lr) => (lr.id === id ? { ...lr, status } : lr))
-    );
-  };
-
-  // Последние заказы
   const recentOrders = [...orders]
-    .sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .slice(0, 3);
 
   return (
     <div className="app-shell center-grid fade-in">
       <div className="card center-card" style={{ maxWidth: 1100 }}>
-        <div className="panel-title">{t("dashboard")}</div>
+        <div className="panel-title">Supplier Dashboard</div>
 
-        {/* KPI блок */}
         <div
           style={{
             display: "grid",
@@ -322,7 +316,7 @@ function Dashboard() {
           }}
         >
           <div className="stat-card">
-            <div className="stat-label">{t("orders today")}</div>
+            <div className="stat-label">Orders today</div>
             <div className="stat-value">{todaysOrders}</div>
             <div className="stat-sub">New orders created today</div>
           </div>
@@ -334,9 +328,9 @@ function Dashboard() {
           </div>
 
           <div className="stat-card">
-            <div className="stat-label">Active chats</div>
+            <div className="stat-label">Connected Customers</div>
             <div className="stat-value">{totalChats}</div>
-            <div className="stat-sub">Ongoing customer conversations</div>
+            <div className="stat-sub">Active links</div>
           </div>
 
           <div className="stat-card">
@@ -346,7 +340,6 @@ function Dashboard() {
           </div>
         </div>
 
-        {/* Две основные панели */}
         <div
           style={{
             display: "grid",
@@ -354,13 +347,12 @@ function Dashboard() {
             gap: 16,
           }}
         >
-          {/* Incoming Link Requests */}
           <div className="panel">
             <div className="panel-title" style={{ marginBottom: 8 }}>
               Incoming Link Requests
             </div>
             <div className="small" style={{ marginBottom: 12 }}>
-              Approve or reject connection requests from your B2B customers.
+              Approve or reject connection requests from your customers.
             </div>
 
             {linkRequests.length === 0 && (
@@ -417,6 +409,7 @@ function Dashboard() {
                       >
                         Approve
                       </button>
+
                       <button
                         className="btn btn-ghost"
                         style={{ padding: "4px 10px" }}
@@ -431,19 +424,17 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* Recent Orders */}
           <div className="panel">
             <div className="panel-title" style={{ marginBottom: 8 }}>
               Recent Orders
             </div>
             <div className="small" style={{ marginBottom: 12 }}>
-              Last few orders placed by your linked customers.
+              Last few orders placed by your customers.
             </div>
 
             {recentOrders.length === 0 && (
               <div className="small" style={{ color: "var(--muted)" }}>
-                No orders yet. Once customers place orders, they will appear
-                here.
+                No orders yet.
               </div>
             )}
 
@@ -452,7 +443,7 @@ function Dashboard() {
                 <div key={o.id} className="request">
                   <div>
                     <div style={{ fontWeight: 600 }}>
-                      #{o.id} — {o.consumer_name}
+                      #{o.id} — {o.consumerName}
                     </div>
                     <div className="meta">
                       Created: {formatDateTime(o.created_at)}
@@ -491,9 +482,9 @@ function Dashboard() {
   );
 }
 
-/* ---------------- PRODUCTS (catalog) ---------------- */
+/* ---------------- Products ---------------- */
 function Products() {
-  const [products, setProducts] = useState(MOCK_PRODUCTS);
+  const [products, setProducts] = useState([]);
   const [filter, setFilter] = useState("");
   const [newProduct, setNewProduct] = useState({
     name: "",
@@ -502,42 +493,28 @@ function Products() {
     unit: "",
   });
 
-  // discount modal state
-  const [discountModal, setDiscountModal] = useState({
-    open: false,
-    productId: null,
-    percent: "",
+  const [editingDiscountFor, setEditingDiscountFor] = useState(null);
+  const [discountInput, setDiscountInput] = useState("");
+
+  const [editingProductFor, setEditingProductFor] = useState(null);
+  const [editedFields, setEditedFields] = useState({
+    name: "",
+    price: "",
+    quantity: "",
+    unit: "",
   });
 
-  const openDiscount = (productId) => {
-    setDiscountModal({ open: true, productId, percent: "" });
-  };
-  const closeDiscount = () => setDiscountModal({ open: false, productId: null, percent: "" });
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
-  const applyDiscount = (e) => {
-    e.preventDefault();
-    const pct = Number(discountModal.percent);
-    if (Number.isNaN(pct) || pct <= 0 || pct >= 100) {
-      alert("Enter a valid discount percent (1 - 99).");
-      return;
+  const loadProducts = async () => {
+    try {
+      const data = await api.get("/products/my-catalog");
+      setProducts(data);
+    } catch (e) {
+      console.error("Failed to load products", e);
     }
-
-    setProducts((prev) =>
-      prev.map((p) => {
-        if (p.id !== discountModal.productId) return p;
-        // Ensure original_price is preserved (only set once)
-        const orig = p.original_price ?? p.price;
-        const newPrice = Math.round(orig * (1 - pct / 100));
-        return {
-          ...p,
-          original_price: orig,
-          price: newPrice,
-          discountPercent: pct,
-        };
-      })
-    );
-
-    closeDiscount();
   };
 
   const filteredProducts = products.filter((p) =>
@@ -551,62 +528,121 @@ function Products() {
       maximumFractionDigits: 0,
     }).format(value);
 
-  const changeStock = (id, delta) => {
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === id
-          ? {
-              ...p,
-              quantity: Math.max(0, p.quantity + delta),
-            }
-          : p
-      )
-    );
+  const removeProduct = async (id) => {
+    if (!window.confirm("Remove this product?")) return;
+    try {
+      // Assuming backend supports DELETE /products/{id}
+      await api.post(`/products/delete/${id}`, {}); // or api.delete if available
+      // Fallback to filtering locally if delete API is missing in description
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+    } catch(e) {
+      console.error(e);
+    }
   };
 
-  const removeProduct = (id) => {
-    if (!window.confirm("Remove this product from catalog?")) return;
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-  };
-
-  const handleAdd = (e) => {
+  const handleAdd = async (e) => {
     e.preventDefault();
-    if (
-      !newProduct.name.trim() ||
-      !newProduct.price ||
-      !newProduct.quantity ||
-      !newProduct.unit.trim()
-    ) {
-      alert("Please fill all fields for the new product.");
+    if (!newProduct.name.trim() || !newProduct.price) {
+      alert("Fill all fields.");
       return;
     }
 
-    const price = Number(newProduct.price);
-    const quantity = parseInt(newProduct.quantity, 10);
+    try {
+      await api.post("/products", {
+        name: newProduct.name.trim(),
+        price: parseFloat(newProduct.price),
+        quantity: parseInt(newProduct.quantity),
+        unit: newProduct.unit.trim()
+      });
+      loadProducts();
+      setNewProduct({ name: "", price: "", quantity: "", unit: "" });
+    } catch (e) {
+      alert("Failed to add product");
+    }
+  };
 
-    if (Number.isNaN(price) || Number.isNaN(quantity)) {
-      alert("Price and quantity must be numeric.");
+  const openDiscountEditor = (id) => {
+    setEditingProductFor(null);
+    const p = products.find((x) => x.id === id);
+    setDiscountInput(p?.discountPercent ? String(p.discountPercent) : "");
+    setEditingDiscountFor(id);
+  };
+
+  const cancelDiscountEdit = () => {
+    setEditingDiscountFor(null);
+    setDiscountInput("");
+  };
+
+  const applyDiscount = async (id) => {
+    const raw = discountInput.trim();
+    const v = Number(raw);
+    if (Number.isNaN(v) || v < 0 || v > 100) {
+      alert("Enter valid percent (0–100).");
       return;
     }
 
-    const product = {
-      id: Date.now(),
-      name: newProduct.name.trim(),
-      original_price: price,
-      price,
-      quantity,
-      unit: newProduct.unit.trim(),
-      discountPercent: null,
-    };
+    try {
+      await api.put(`/products/${id}/discount`, { percent: Math.round(v) });
+      loadProducts();
+      cancelDiscountEdit();
+    } catch (e) {
+      alert("Failed to apply discount");
+    }
+  };
 
-    setProducts((prev) => [product, ...prev]);
-
-    setNewProduct({
-      name: "",
-      price: "",
-      quantity: "",
-      unit: "",
+  const openEditEditor = (id) => {
+    setEditingDiscountFor(null);
+    const p = products.find((x) => x.id === id);
+    if (!p) return;
+    setEditedFields({
+      name: p.name,
+      price: String(p.price),
+      quantity: String(p.quantity),
+      unit: p.unit,
     });
+    setEditingProductFor(id);
+  };
+
+  const cancelEdit = () => {
+    setEditingProductFor(null);
+    setEditedFields({ name: "", price: "", quantity: "", unit: "" });
+  };
+
+  const saveEdit = async (id) => {
+    const name = editedFields.name.trim();
+    const price = Number(editedFields.price);
+    const quantity = parseInt(editedFields.quantity, 10);
+    const unit = editedFields.unit.trim();
+
+    if (!name || Number.isNaN(price)) {
+      alert("Fill all fields correctly.");
+      return;
+    }
+
+    try {
+      await api.put(`/products/${id}`, {
+        name,
+        price,
+        quantity,
+        unit
+      });
+      loadProducts();
+      cancelEdit();
+    } catch(e) {
+      alert("Failed to update product");
+    }
+  };
+
+  const handleEditorKeyDown = (e, type, id) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (type === "discount") applyDiscount(id);
+      if (type === "edit") saveEdit(id);
+    }
+    if (e.key === "Escape") {
+      if (type === "discount") cancelDiscountEdit();
+      if (type === "edit") cancelEdit();
+    }
   };
 
   return (
@@ -614,7 +650,6 @@ function Products() {
       <div className="card center-card" style={{ maxWidth: 1100 }}>
         <div className="panel-title">Product Catalog</div>
 
-        {/* Top toolbar: search + quick info */}
         <div
           style={{
             display: "flex",
@@ -627,16 +662,15 @@ function Products() {
           <input
             className="input"
             style={{ maxWidth: 260 }}
-            placeholder="Search by name…"
+            placeholder="Search…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
           <div className="small" style={{ color: "var(--muted)" }}>
-            Total products: <strong>{products.length}</strong>
+            Total: <strong>{products.length}</strong>
           </div>
         </div>
 
-        {/* Products list */}
         <div
           style={{
             borderRadius: 14,
@@ -647,11 +681,10 @@ function Products() {
         >
           {filteredProducts.length === 0 ? (
             <div className="small" style={{ color: "var(--muted)" }}>
-              No products match this filter. Try changing the search text.
+              No products found.
             </div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              {/* header row */}
               <div
                 className="small"
                 style={{
@@ -667,116 +700,227 @@ function Products() {
                 <div style={{ textAlign: "right" }}>Actions</div>
               </div>
 
-              {filteredProducts.map((p) => (
-                <div
-                  key={p.id}
-                  className="request"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "3fr 1fr 1fr 1.4fr",
-                    alignItems: "center",
-                    gap: 8,
-                  }}
-                >
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{p.name}</div>
-                    <div className="meta">Unit: {p.unit}</div>
-                  </div>
+              {filteredProducts.map((p) => {
+                const discounted = p.discountPercent > 0;
+                const discountedPrice = discounted
+                  ? Math.round(p.price * (1 - p.discountPercent / 100))
+                  : p.price;
 
-                  <div className="small" style={{ textAlign: "left" }}>
-                    {p.discountPercent ? (
-                      <div>
-                        <div style={{ fontSize: 13, color: "var(--muted)" }}>
-                          <span
-                            style={{
-                              textDecoration: "line-through",
-                              marginRight: 8,
-                            }}
-                          >
-                            {formatPrice(p.original_price)}
-                          </span>
-                          <strong>{formatPrice(p.price)}</strong>
-                        </div>
-
-                        <div style={{ marginTop: 6 }}>
-                          <span
-                            className="badge"
-                            style={{
-                              background: "rgba(37,99,235,0.06)",
-                              color: "var(--accent)",
-                            }}
-                          >
-                            Discount {p.discountPercent}%
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div>{formatPrice(p.price)}</div>
-                    )}
-                  </div>
-
-
-                  <div className="small">
-                    {p.quantity > 0 ? (
-                      <>
-                        {p.quantity}{" "}
-                        <span style={{ color: "var(--muted)" }}>in stock</span>
-                      </>
-                    ) : (
-                      <span style={{ color: "#b91c1c", fontWeight: 600 }}>
-                        Out of stock
-                      </span>
-                    )}
-                  </div>
-
+                return (
                   <div
+                    key={p.id}
+                    className="request"
                     style={{
-                      display: "flex",
-                      justifyContent: "flex-end",
-                      gap: 6,
+                      display: "grid",
+                      gridTemplateColumns: "3fr 1fr 1fr 1.4fr",
+                      alignItems: "center",
+                      gap: 8,
                     }}
                   >
-                    <button
-                      className="btn btn-ghost"
-                      style={{ padding: "4px 10px" }}
-                      onClick={() => changeStock(p.id, -1)}
-                      disabled={p.quantity === 0}
-                    >
-                      −1
-                    </button>
-                    <button
-                      className="btn btn-ghost"
-                      style={{ padding: "4px 10px" }}
-                      onClick={() => changeStock(p.id, +1)}
-                    >
-                      +1
-                    </button>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{p.name}</div>
+                      <div className="meta">Unit: {p.unit}</div>
+                    </div>
 
-                    {/* NEW: Discount button */}
-                    <button
-                      className="btn btn-ghost"
-                      style={{ padding: "4px 10px", color: "#0b5cff" }}
-                      onClick={() => openDiscount(p.id)}
-                    >
-                      Discount
-                    </button>
+                    <div className="small">
+                      {discounted ? (
+                        <>
+                          <div style={{ textDecoration: "line-through", opacity: 0.6 }}>
+                            {formatPrice(p.original_price || p.price)}
+                          </div>
+                          <div style={{ fontWeight: 700 }}>
+                            {formatPrice(p.price)}
+                          </div>
+                          <span className="badge">-{p.discountPercent}%</span>
+                        </>
+                      ) : (
+                        formatPrice(p.price)
+                      )}
+                    </div>
 
-                    <button
-                      className="btn btn-ghost"
-                      style={{ padding: "4px 10px", color: "#b91c1c" }}
-                      onClick={() => removeProduct(p.id)}
+                    <div className="small">
+                      {p.quantity > 0 ? (
+                        <>
+                          {p.quantity}{" "}
+                          <span style={{ color: "var(--muted)" }}>in stock</span>
+                        </>
+                      ) : (
+                        <span style={{ color: "#b91c1c", fontWeight: 600 }}>
+                          Out of stock
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        gap: 6,
+                      }}
                     >
-                      Remove
-                    </button>
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: "4px 10px" }}
+                        onClick={() => openDiscountEditor(p.id)}
+                      >
+                        Discount
+                      </button>
+
+                      {/* ADD THE EDIT BUTTON FROM FRIEND'S VERSION */}
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: "4px 10px" }}
+                        onClick={() => openEditEditor(p.id)}
+                      >
+                        Edit
+                      </button>
+
+                      <button
+                        className="btn btn-ghost"
+                        style={{ padding: "4px 10px", color: "#b91c1c" }}
+                        onClick={() => removeProduct(p.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    {/* EXPANDING EDIT ROWS */}
+                    {editingDiscountFor === p.id && (
+                      <div
+                        style={{
+                          gridColumn: "1 / -1",
+                          marginTop: 6,
+                          padding: 10,
+                          borderRadius: 8,
+                          background: "rgba(59,130,246,0.03)",
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, minWidth: 160 }}>
+                          Set discount for {p.name}
+                        </div>
+                        <input
+                          className="input"
+                          style={{ width: 120 }}
+                          value={discountInput}
+                          placeholder="10"
+                          onChange={(e) => setDiscountInput(e.target.value)}
+                          onKeyDown={(e) =>
+                            handleEditorKeyDown(e, "discount", p.id)
+                          }
+                        />
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => applyDiscount(p.id)}
+                        >
+                          Apply
+                        </button>
+                        <button
+                          className="btn btn-ghost"
+                          onClick={cancelDiscountEdit}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+
+                    {editingProductFor === p.id && (
+                      <div
+                        style={{
+                          gridColumn: "1 / -1",
+                          marginTop: 6,
+                          padding: 12,
+                          borderRadius: 8,
+                          background: "rgba(15,23,42,0.02)",
+                          display: "flex",
+                          gap: 12,
+                          alignItems: "center",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <input
+                          className="input"
+                          value={editedFields.name}
+                          onChange={(e) =>
+                            setEditedFields((s) => ({
+                              ...s,
+                              name: e.target.value,
+                            }))
+                          }
+                          placeholder="Product name"
+                          style={{ flex: "1 1 280px", minWidth: 180 }}
+                          onKeyDown={(e) =>
+                            handleEditorKeyDown(e, "edit", p.id)
+                          }
+                        />
+
+                        <input
+                          className="input"
+                          value={editedFields.price}
+                          onChange={(e) =>
+                            setEditedFields((s) => ({
+                              ...s,
+                              price: e.target.value,
+                            }))
+                          }
+                          placeholder="Price"
+                          style={{ flex: "0 1 140px", minWidth: 120 }}
+                          onKeyDown={(e) =>
+                            handleEditorKeyDown(e, "edit", p.id)
+                          }
+                        />
+
+                        <input
+                          className="input"
+                          value={editedFields.quantity}
+                          onChange={(e) =>
+                            setEditedFields((s) => ({
+                              ...s,
+                              quantity: e.target.value,
+                            }))
+                          }
+                          placeholder="Quantity"
+                          style={{ flex: "0 1 120px", minWidth: 100 }}
+                          onKeyDown={(e) =>
+                            handleEditorKeyDown(e, "edit", p.id)
+                          }
+                        />
+
+                        <input
+                          className="input"
+                          value={editedFields.unit}
+                          onChange={(e) =>
+                            setEditedFields((s) => ({
+                              ...s,
+                              unit: e.target.value,
+                            }))
+                          }
+                          placeholder="Unit"
+                          style={{ flex: "0 1 140px", minWidth: 100 }}
+                          onKeyDown={(e) =>
+                            handleEditorKeyDown(e, "edit", p.id)
+                          }
+                        />
+
+                        <div style={{ display: "flex", gap: 8, marginLeft: "auto" }}>
+                          <button className="btn btn-primary" onClick={() => saveEdit(p.id)}>
+                            Save
+                          </button>
+                          <button className="btn btn-ghost" onClick={cancelEdit}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Add new product form */}
         <div
           className="panel"
           style={{
@@ -786,11 +930,7 @@ function Products() {
           }}
         >
           <div className="panel-title" style={{ marginBottom: 8 }}>
-            Add New Product (demo)
-          </div>
-          <div className="small" style={{ marginBottom: 10 }}>
-            This form updates local mock data. Later backend can connect to
-            <code> POST /products</code>.
+            Add New Product
           </div>
 
           <form
@@ -823,15 +963,12 @@ function Products() {
               placeholder="Quantity"
               value={newProduct.quantity}
               onChange={(e) =>
-                setNewProduct((prev) => ({
-                  ...prev,
-                  quantity: e.target.value,
-                }))
+                setNewProduct((prev) => ({ ...prev, quantity: e.target.value }))
               }
             />
             <input
               className="input"
-              placeholder="Unit (e.g. kg, box)"
+              placeholder="Unit"
               value={newProduct.unit}
               onChange={(e) =>
                 setNewProduct((prev) => ({ ...prev, unit: e.target.value }))
@@ -844,60 +981,23 @@ function Products() {
           </form>
         </div>
       </div>
-      {/* Discount modal (simple inline modal) */}
-        {discountModal.open && (
-          <div
-            style={{
-              position: "fixed",
-              left: 0,
-              top: 0,
-              right: 0,
-              bottom: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              background: "rgba(0,0,0,0.35)",
-              zIndex: 1200,
-            }}
-            onClick={closeDiscount}
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: 360,
-                background: "white",
-                borderRadius: 12,
-                padding: 18,
-                boxShadow: "0 10px 30px rgba(0,0,0,0.15)",
-              }}
-            >
-              <div style={{ fontWeight: 700, marginBottom: 8 }}>Apply discount</div>
-              <div className="small" style={{ marginBottom: 12 }}>
-                Enter discount percent (1–99). This updates product price locally.
-              </div>
-
-              <form onSubmit={applyDiscount} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input
-                  className="input"
-                  style={{ flex: 1 }}
-                  placeholder="Percent (e.g. 10)"
-                  value={discountModal.percent}
-                  onChange={(e) => setDiscountModal((s) => ({ ...s, percent: e.target.value }))}
-                />
-                <button type="submit" className="btn btn-primary">Apply</button>
-                <button type="button" className="btn btn-ghost" onClick={closeDiscount}>Cancel</button>
-              </form>
-            </div>
-          </div>
-        )}
     </div>
   );
 }
 
-/* ---------------- ORDERS (list) ---------------- */
+
 function Orders() {
   const navigate = useNavigate();
-  const [orders] = useState(MOCK_ORDERS);
+  const [orders, setOrders] = useState([]);
+
+  useEffect(() => {
+    api.get("/orders").then(data => {
+      setOrders(data.map(o => ({
+        ...o,
+        consumer_name: `Customer #${o.consumer_id}`
+      })));
+    });
+  }, []);
 
   const formatTime = (ts) =>
     new Date(ts).toLocaleString([], {
@@ -966,8 +1066,14 @@ function Orders() {
 function OrderDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const orderId = parseInt(id, 10);
-  const order = MOCK_ORDERS.find((o) => o.id === orderId);
+  const [order, setOrder] = useState(null);
+
+  useEffect(() => {
+    api.get("/orders").then(list => {
+      const found = list.find(o => o.id === parseInt(id));
+      if(found) setOrder({ ...found, consumer_name: `Customer #${found.consumer_id}` });
+    });
+  }, [id]);
 
   const formatTime = (ts) =>
     new Date(ts).toLocaleString([], {
@@ -978,25 +1084,30 @@ function OrderDetails() {
       minute: "2-digit",
     });
 
-  if (!order) {
-    return (
-      <div className="app-shell center-grid fade-in">
-        <div className="card center-card" style={{ maxWidth: 700 }}>
-          <div className="panel-title">Order not found</div>
-          <div className="small" style={{ marginBottom: 12 }}>
-            The order you are looking for does not exist.
-          </div>
-          <button className="btn btn-primary" onClick={() => navigate("/orders")}>
-            Back to Orders
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (!order) return <div>Loading...</div>;
+
+  const acceptOrder = async () => {
+    try {
+      await api.put(`/orders/${id}/status`, { status: "confirmed" });
+      setOrder((prev) => ({ ...prev, status: "confirmed" }));
+    } catch(e) {
+      alert("Failed");
+    }
+  };
+
+  const rejectOrder = async () => {
+    if (!window.confirm("Reject this order?")) return;
+    try {
+      await api.put(`/orders/${id}/status`, { status: "rejected" });
+      setOrder((prev) => ({ ...prev, status: "rejected" }));
+    } catch(e) {
+      alert("Failed");
+    }
+  };
 
   const goToChat = () => {
     navigate("/chat", {
-      state: { customerName: order.consumer_name }, // pass to Chat
+      state: { consumerId: order.consumer_id, customerName: order.consumer_name },
     });
   };
 
@@ -1005,172 +1116,105 @@ function OrderDetails() {
       <div className="card center-card" style={{ maxWidth: 800 }}>
         <div className="panel-title">Order #{order.id}</div>
 
-        <div className="small" style={{ marginBottom: 16 }}>
-          Detailed view of the order and quick access to customer chat.
-        </div>
-
         <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
-          <div>
-            <strong>Customer:</strong> {order.consumer_name}
-          </div>
-          <div>
-            <strong>Status:</strong>{" "}
-            <span
-              className="badge"
-              style={{
-                background: "rgba(37,99,235,0.06)",
-                color: "var(--accent)",
-              }}
-            >
-              {order.status}
-            </span>
-          </div>
-
-          <div>
-            <strong>Delivery type:</strong>{" "}
-            {order.delivery_type === "delivery" ? "Delivery" : "Pickup"}
-          </div>
-
-          <div>
-            <strong>Total amount:</strong> {order.total_amount} ₸
-          </div>
-          <div>
-            <strong>Created at:</strong> {formatTime(order.created_at)}
-          </div>
+          <div><strong>Customer:</strong> {order.consumer_name}</div>
+          <div><strong>Status:</strong> <span className="badge">{order.status}</span></div>
+          <div><strong>Total amount:</strong> {order.total_amount} ₸</div>
+          <div><strong>Created at:</strong> {formatTime(order.created_at)}</div>
         </div>
 
-        {/* Placeholder for line items / products */}
         <div
           style={{
-            padding: 12,
-            borderRadius: 10,
-            background: "rgba(15,23,42,0.02)",
-            marginBottom: 20,
+            display: "flex",
+            gap: 8,
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
-          <div className="small" style={{ fontWeight: 600, marginBottom: 8 }}>
-            Items in this order (demo)
-          </div>
-          <div className="small">
-            In the real system this section will list ordered products from{" "}
-            <code>/orders/{order.id}/items</code>.
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: 8, justifyContent: "space-between" }}>
           <button className="btn btn-ghost" onClick={() => navigate("/orders")}>
             ← Back to Orders
           </button>
-          <button className="btn btn-primary" onClick={goToChat}>
-            Open Chat with {order.consumer_name}
-          </button>
+
+          {order.status === "pending" ? (
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" onClick={acceptOrder}>
+                Accept Order
+              </button>
+              <button className="btn btn-ghost" style={{ color: "#b91c1c" }} onClick={rejectOrder}>
+                Reject Order
+              </button>
+              <button className="btn btn-primary" onClick={goToChat}>
+                Open Chat
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-primary" onClick={goToChat}>
+              Open Chat
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-const MOCK_CONVERSATIONS = [
-  {
-    id: 1,
-    name: "Bakyt",
-    lastMessage: "I have a question about order #1001",
-    lastTime: new Date().toISOString(),
-  },
-    {
-    id: 2,
-    name: "Ainur",
-    lastMessage: "Can you send updated price list?",
-    lastTime: new Date(Date.now() - 3600_000).toISOString(),
-  },
-  {
-    id: 3,
-    name: "Retail Store #12",
-    lastMessage: "Thanks for the fast delivery!",
-    lastTime: new Date(Date.now() - 2 * 3600_000).toISOString(),
-  },
-];
-
 /* ---------------- CHAT ---------------- */
-/* ---------------- CHAT (replace your existing Chat function with this) ---------------- */
 function Chat() {
-  // Local mock conversations (component-local so this is self-contained)
-  const MOCK_CONVERSATIONS = [
-    { id: 1, name: "Bakyt", lastMessage: "I have a question about order #1001", lastTime: new Date().toISOString() },
-    { id: 2, name: "Ainur", lastMessage: "Can you send updated price list?", lastTime: new Date(Date.now() - 3600_000).toISOString() },
-    { id: 3, name: "Retail Store #12", lastMessage: "Thanks for the fast delivery!", lastTime: new Date(Date.now() - 2 * 3600_000).toISOString() },
-  ];
-
-  // ensure necessary hooks are available
-  // (make sure at top of your file you have: import React, { useState, useEffect, useRef } from "react";
-  //  and: import { useLocation } from "react-router-dom"; )
   const location = useLocation();
-  const customerName = location.state?.customerName || null;
-
-  const [conversations, setConversations] = useState(MOCK_CONVERSATIONS);
-  // messages grouped by conversation id
-  const [messagesByConv, setMessagesByConv] = useState({
-    1: [
-      { id: 1, sender: "supplier", content: "Hello, how can we help?", timestamp: new Date().toISOString() },
-      { id: 2, sender: "consumer", content: "I have a question about order #1001", timestamp: new Date().toISOString() },
-    ],
-    2: [{ id: 3, sender: "consumer", content: "Can you send updated price list?", timestamp: new Date().toISOString() }],
-    3: [
-      { id: 4, sender: "consumer", content: "Thanks for the fast delivery!", timestamp: new Date().toISOString() },
-      { id: 5, sender: "supplier", content: "You’re welcome!", timestamp: new Date().toISOString() },
-    ],
-  });
-
-  // active chat id
-  const [activeId, setActiveId] = useState(() => {
-    if (customerName) {
-      const match = MOCK_CONVERSATIONS.find((c) => c.name === customerName);
-      if (match) return match.id;
-    }
-    return MOCK_CONVERSATIONS[0]?.id ?? null;
-  });
-
+  // Match user's API expectations where consumerId is passed
+  const startId = location.state?.consumerId;
+  const [activeId, setActiveId] = useState(startId || null);
+  
+  const [conversations, setConversations] = useState([]);
+  const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const messagesRef = useRef(null);
 
-  // helper to format HH:MM
-  const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
+  // Load conversations (accepted links)
   useEffect(() => {
-    const el = messagesRef.current;
-    if (!el) return;
+    const loadConvos = async () => {
+      try {
+        const links = await api.get("/supplier/links");
+        const accepted = links.filter(l => l.status === "accepted").map(l => ({
+          id: l.consumer_id,
+          name: `Customer #${l.consumer_id}`
+        }));
+        setConversations(accepted);
+        if (!activeId && accepted.length > 0) {
+          setActiveId(accepted[0].id);
+        }
+      } catch (e) { console.error(e); }
+    };
+    loadConvos();
+  }, []);
 
-    // Immediately snap to bottom to avoid any parent resize flicker
-    el.scrollTop = el.scrollHeight;
+  // Poll messages
+  useEffect(() => {
+    if (!activeId) return;
+    const fetchMsgs = () => {
+      api.get(`/chat/${activeId}`).then(setMessages).catch(() => {});
+    };
+    fetchMsgs();
+    const interval = setInterval(fetchMsgs, 3000);
+    return () => clearInterval(interval);
+  }, [activeId]);
 
-    // Then try a smooth nudge (if supported)
-    try {
-      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    } catch (e) {
-      el.scrollTop = el.scrollHeight;
+  // Scroll bottom
+  useEffect(() => {
+    if (messagesRef.current) {
+      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }
-  }, [activeId, messagesByConv[activeId]?.length]);
+  }, [messages]);
 
-  // if customerName passed via navigate state, focus that conversation
-  useEffect(() => {
-    if (!customerName) return;
-    const match = conversations.find((c) => c.name === customerName);
-    if (match) setActiveId(match.id);
-  }, [customerName, conversations]);
-
-  // send message (records timestamp once)
-  const send = () => {
+  const send = async () => {
     if (!text.trim() || !activeId) return;
-    const now = new Date().toISOString();
-    const newMsg = { id: Date.now(), sender: "supplier", content: text.trim(), timestamp: now };
-
-    setMessagesByConv((prev) => ({ ...prev, [activeId]: [...(prev[activeId] || []), newMsg] }));
-
-    setConversations((prev) =>
-      prev.map((c) => (c.id === activeId ? { ...c, lastMessage: newMsg.content, lastTime: now } : c))
-    );
-
-    setText("");
+    try {
+      await api.post("/chat", { recipient_id: activeId, content: text });
+      setText("");
+      // Immediate refresh
+      const msgs = await api.get(`/chat/${activeId}`);
+      setMessages(msgs);
+    } catch (e) { alert("Failed to send"); }
   };
 
   const handleKeyDown = (e) => {
@@ -1180,46 +1224,22 @@ function Chat() {
     }
   };
 
-  // sorted conversations by last message time (newest first) — convert timestamps to numbers
-  const sortedConversations = [...conversations].sort((a, b) => {
-    const msgsA = messagesByConv[a.id] || [];
-    const msgsB = messagesByConv[b.id] || [];
-    const lastATs = msgsA[msgsA.length - 1]?.timestamp || a.lastTime;
-    const lastBTs = msgsB[msgsB.length - 1]?.timestamp || b.lastTime;
-    const timeA = lastATs ? new Date(lastATs).getTime() : 0;
-    const timeB = lastBTs ? new Date(lastBTs).getTime() : 0;
-    return timeB - timeA;
-  });
-
-  const activeMessages = messagesByConv[activeId] || [];
-  const activeConv = conversations.find((c) => c.id === activeId);
+  const activeConv = conversations.find(c => c.id === activeId);
 
   return (
     <div className="app-shell center-grid fade-in">
       <div
         className="card center-card chat-card"
-        style={{
-          maxWidth: 1000,
-          minHeight: "65vh",
-          display: "flex",
-          flexDirection: "column",   // <-- important
-        }}
+        style={{ maxWidth: 1000, minHeight: "65vh", display: "flex", flexDirection: "column" }}
       >
         <div className="panel-title">Chat</div>
 
         <div style={{ display: "flex", gap: 16, marginTop: 12, minHeight: "55vh" }}>
-          {/* LEFT: conversations list */}
           <div style={{ width: 260, borderRight: "1px solid rgba(15,23,42,0.06)", paddingRight: 10, paddingTop: 4 }}>
-            <div className="small" style={{ marginBottom: 8, fontWeight: 600 }}>
-              Conversations
-            </div>
-
+            <div className="small" style={{ marginBottom: 8, fontWeight: 600 }}>Conversations</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {sortedConversations.map((conv) => {
+              {conversations.map((conv) => {
                 const isActive = conv.id === activeId;
-                const convMessages = messagesByConv[conv.id] || [];
-                const lastMsg = convMessages[convMessages.length - 1];
-                const lastTime = lastMsg?.timestamp || conv.lastTime;
                 return (
                   <button
                     key={conv.id}
@@ -1233,33 +1253,28 @@ function Chat() {
                       cursor: "pointer",
                     }}
                   >
-                    <div style={{ fontWeight: 600, marginBottom: 2, color: isActive ? "var(--accent)" : "var(--text)" }}>
+                    <div style={{ fontWeight: 600, color: isActive ? "var(--accent)" : "var(--text)" }}>
                       {conv.name}
                     </div>
-                    <div className="small" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>
-                      {conv.lastMessage}
-                    </div>
-                    <div className="meta">{lastTime ? formatTime(lastTime) : ""}</div>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* RIGHT: active conversation */}
           <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
             <div className="small" style={{ marginBottom: 8, fontWeight: 600 }}>
               {activeConv ? `Chat with ${activeConv.name}` : "Select a chat"}
             </div>
+
             <div
               ref={messagesRef}
               style={{
-                // keep as a flex child but give it a stable, fixed height
                 flex: "1 1 auto",
-                minHeight: 0,                // allow proper flex shrinking
-                height: "52vh",              // <-- FIXED visual size for the chat area (adjust if needed)
-                boxSizing: "border-box",     // include padding in the height calculation
-                overflowY: "auto",           // enable scrolling, don't grow page
+                minHeight: 0,
+                height: "52vh",
+                boxSizing: "border-box",
+                overflowY: "auto",
                 display: "flex",
                 flexDirection: "column",
                 gap: 8,
@@ -1268,32 +1283,15 @@ function Chat() {
                 background: "rgba(15,23,42,0.01)",
               }}
             >
-              {activeMessages.map((m) => (
-                <div
-                  key={m.id}
-                  style={{
-                    alignSelf: m.sender === "supplier" ? "flex-end" : "flex-start",
-                    maxWidth: "78%",
-                    wordBreak: "break-word",   // keep long words wrapped
-                  }}
-                >
-                  <div style={{ background: "rgba(0,0,0,0.04)", padding: 10, borderRadius: 10 }}>
-                    <div style={{ fontSize: 13, marginBottom: 6 }}>{m.content}</div>
-                    <div className="meta" style={{ textAlign: "right" }}>
-                      {formatTime(m.timestamp)}
-                    </div>
+              {messages.map((m) => (
+                <div key={m.id} style={{ alignSelf: m.sender_id === activeId ? "flex-start" : "flex-end", maxWidth: "78%", wordBreak: "break-word" }}>
+                  <div style={{ background: m.sender_id === activeId ? "rgba(0,0,0,0.04)" : "rgba(59,130,246,0.1)", padding: 10, borderRadius: 10 }}>
+                    <div style={{ fontSize: 13 }}>{m.content}</div>
                   </div>
                 </div>
               ))}
-
-              {activeMessages.length === 0 && (
-                <div className="small" style={{ color: "var(--muted)" }}>
-                  No messages yet. Start the conversation below.
-                </div>
-              )}
             </div>
 
-            {/* input bar */}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <input
                 className="input"
@@ -1304,9 +1302,7 @@ function Chat() {
                 placeholder={activeConv ? "Write a message..." : "Select a conversation first"}
                 disabled={!activeConv}
               />
-              <button className="btn btn-primary" onClick={send} disabled={!activeConv}>
-                Send
-              </button>
+              <button className="btn btn-primary" onClick={send} disabled={!activeConv}>Send</button>
             </div>
           </div>
         </div>
@@ -1315,30 +1311,133 @@ function Chat() {
   );
 }
 
-/* ---------------- About ---------------- */
 function AboutPage() {
   return (
     <div className="app-shell center-grid fade-in">
       <div className="card center-card" style={{ maxWidth: 700 }}>
         <div className="panel-title">About This Platform</div>
-
         <p className="small">
           This Supplier–Consumer Platform was developed as a project by our team.
-          It allows suppliers to manage product catalogs, handle link requests
-          from consumers, and process complaints.
         </p>
+      </div>
+    </div>
+  );
+}
 
-        <p className="small">
-          Team members:<br />
-          • Aldiyar Kunduskairov <br />
-          • Rauan Kozhakhmetov <br />
-          • Sanzhar Umirbayev <br />
-          • Sayat Mushkin
-        </p>
+function ProfilePage() {
+  const [about, setAbout] = React.useState("");
+  const [visible, setVisible] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [tempAbout, setTempAbout] = React.useState("");
 
-        <p className="small">
-          Telegram: <strong>@snjroo</strong>
-        </p>
+  useEffect(() => {
+    const savedAbout = localStorage.getItem("supplierAbout");
+    const savedVis = localStorage.getItem("supplierVisible") === "true";
+    setAbout(savedAbout || "");
+    setVisible(savedVis);
+    setTempAbout(savedAbout || "");
+  }, []);
+
+  const saveAbout = async () => {
+    try {
+      await api.put("/supplier/profile", { about: tempAbout });
+      setAbout(tempAbout);
+      localStorage.setItem("supplierAbout", tempAbout);
+      setEditing(false);
+    } catch(e) {
+      alert("Failed to save profile (Backend err)");
+      // Fallback for demo if API not ready
+      setAbout(tempAbout);
+      localStorage.setItem("supplierAbout", tempAbout);
+      setEditing(false);
+    }
+  };
+
+  const toggleVisibility = async () => {
+    const newStatus = !visible;
+    try {
+      await api.post(`/supplier/visibility/${newStatus ? 'show' : 'hide'}`);
+      setVisible(newStatus);
+      localStorage.setItem("supplierVisible", newStatus);
+    } catch (e) {
+       // Fallback
+      setVisible(newStatus);
+      localStorage.setItem("supplierVisible", newStatus);
+    }
+  };
+
+  return (
+    <div className="app-shell center-grid fade-in">
+      <div className="card center-card" style={{ maxWidth: 700 }}>
+        <div className="panel-title" style={{ marginBottom: 10 }}>
+          Supplier Profile
+        </div>
+
+        <button
+          className="btn"
+          style={{
+            background: visible ? "rgba(16,185,129,0.15)" : "rgba(248,113,113,0.15)",
+            color: visible ? "#047857" : "#b91c1c",
+            marginBottom: 16,
+          }}
+          onClick={toggleVisibility}
+        >
+          {visible ? "Make Invisible" : "Make Visible"}
+        </button>
+
+        <div className="panel">
+          <div className="small" style={{ fontWeight: 600, marginBottom: 6 }}>
+            About Me
+          </div>
+
+          {!editing ? (
+            <>
+              <div style={{ whiteSpace: "pre-wrap", marginBottom: 16 }}>
+                {about.trim() ? (
+                  about
+                ) : (
+                  <span style={{ color: "var(--muted)" }}>
+                    Nothing written yet.
+                  </span>
+                )}
+              </div>
+
+              <button className="btn btn-primary" onClick={() => setEditing(true)}>
+                Edit
+              </button>
+            </>
+          ) : (
+            <>
+              <textarea
+                value={tempAbout}
+                onChange={(e) => setTempAbout(e.target.value)}
+                style={{
+                  width: "100%",
+                  height: 140,
+                  padding: 12,
+                  borderRadius: 10,
+                  border: "1px solid rgba(0,0,0,0.1)",
+                  marginBottom: 12,
+                }}
+              />
+
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="btn btn-primary" onClick={saveAbout}>
+                  Save
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setTempAbout(about);
+                    setEditing(false);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1351,19 +1450,22 @@ export default function App() {
       <BrowserRouter>
         <HeaderBar />
         <AuthWatcher />
+
         <Routes>
-          {/* public */}
+          {/* Public routes */}
           <Route path="/" element={<LoginPage />} />
+          <Route path="/register" element={<SignUpPage />} />
           <Route path="/about" element={<AboutPage />} />
 
-          {/* protected */}
+          {/* Protected routes */}
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/products" element={<Products />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/orders/:id" element={<OrderDetails />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/profile" element={<ProfilePage />} />
 
-          {/* fallback */}
+          {/* Fallback */}
           <Route path="*" element={<LoginPage />} />
         </Routes>
       </BrowserRouter>

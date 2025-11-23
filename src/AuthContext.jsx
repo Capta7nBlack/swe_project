@@ -1,13 +1,7 @@
 // src/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from "react";
-
-// If using mock, import the mock auth function
-const useMock = typeof window !== "undefined" && window.__USE_MOCK;
-let mockAuth;
-if (useMock) {
-  // dynamic import to avoid errors when bundling production
-  mockAuth = require("./mockApi").authToken;
-}
+// CHANGED: Import the real API helper
+import { api } from "./api";
 
 const AuthContext = createContext();
 
@@ -28,13 +22,15 @@ export function AuthProvider({ children }) {
   }, [token]);
 
   const login = async (username, password) => {
-    if (useMock && mockAuth) {
-      const data = await mockAuth(username, password);
+    // CHANGED: Use real API call
+    try {
+      const data = await api.login(username, password);
       setToken(data.access_token);
       return data;
+    } catch (e) {
+      console.error("Auth error", e);
+      return null;
     }
-    // Otherwise the app will perform real fetch in components
-    return null;
   };
 
   const logout = () => setToken(null);
